@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import { z } from 'zod/v4'
 import { clearInvokedSkillsForAgent } from '../../bootstrap/state.js'
+import { truncateAgentContent } from './truncateAgentContent.js'
 import {
   ALL_AGENT_DISALLOWED_TOOLS,
   ASYNC_AGENT_ALLOWED_TOOLS,
@@ -315,6 +316,9 @@ export function finalizeAgentTool(
       }
     }
   }
+
+  // Cap total text size to prevent unbounded context growth in parent.
+  content = truncateAgentContent(content)
 
   const totalTokens = getTokenCountFromUsage(lastAssistantMessage.message.usage)
   const totalToolUseCount = countToolUses(agentMessages)

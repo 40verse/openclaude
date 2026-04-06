@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["40mcp", "serve", "node_modules/40mcp/configs/github.json"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+
+    "notion": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["40mcp", "serve", "node_modules/40mcp/configs/notion.json"],
+      "env": {
+        "NOTION_TOKEN": "${NOTION_TOKEN}"
+      }
+    },
+
+    "my-openapi-service": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["40mcp", "from-openapi", "./specs/my-api.json"],
+      "env": {
+        "API_KEY": "${MY_API_KEY}"
+      }
+    },
+
+    "workspace": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "40mcp", "mix",
+        "--notion", "node_modules/40mcp/configs/notion.json",
+        "--linear", "node_modules/40mcp/configs/linear.json",
+        "--slack",  "node_modules/40mcp/configs/slack.json"
+      ],
+      "env": {
+        "NOTION_TOKEN": "${NOTION_TOKEN}",
+        "LINEAR_API_KEY": "${LINEAR_API_KEY}",
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}"
+      }
+    }
+  }
+}

@@ -8,27 +8,38 @@
  *      (spawn-then-persist ordering, not persist-then-spawn).
  *   4. spawnTeammate() re-throws the spawn error without swallowing it.
  *
- * All heavy dependencies are replaced via mock.module() so the tests
- * run without a real filesystem, AppState, or agent process.
+ * Strategy: use a real tmpdir for team file I/O (redirected via CLAUDE_CONFIG_DIR)
+ * rather than mocking teamHelpers.js.  This avoids cross-worker module mock bleed
+ * while still letting us assert on the actual file contents.  Only the
+ * in-process spawn/runner modules and their heavy infrastructure are stubbed.
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-// ─── Call-order tracking ────────────────────────────────────────────────────
+// ─── Shared state ───────────────────────────────────────────────────────────
 
-const callOrder: string[] = []
-
-// ─── Shared mock state ──────────────────────────────────────────────────────
-
+let tmpDir = ''
 let spawnShouldSucceed = true
 
-const mockWriteTeamFileAsync = mock(async (_name: string, _file: unknown) => {
-  callOrder.push('writeTeamFileAsync')
-})
+/** File state captured inside the spawn mock — used for TOCTOU assertions. */
+let teamFileAtSpawnTime: { members: Array<{ name: string }> } | null = null
 
 const mockSpawnInProcessTeammate = mock(
   async (config: { name: string; teamName: string }) => {
-    callOrder.push('spawnInProcessTeammate')
+    // Snapshot the team file AT THE MOMENT spawn is called.
+    // Under the old (broken) ordering the new member would already be present;
+    // under the fixed ordering it must NOT be present yet.
+    const configPath = join(tmpDir, 'teams', config.teamName, 'config.json')
+    try {
+      const raw = await readFile(configPath, 'utf-8')
+      teamFileAtSpawnTime = JSON.parse(raw) as { members: Array<{ name: string }> }
+    } catch {
+      teamFileAtSpawnTime = null
+    }
+
     if (!spawnShouldSucceed) {
       return {
         success: false,
@@ -47,102 +58,18 @@ const mockSpawnInProcessTeammate = mock(
 )
 
 const mockStartInProcessTeammate = mock((_opts: unknown) => {
-  // fire-and-forget; no return value needed
+  /* fire-and-forget stub */
 })
 
-const baseTeamFile = {
-  name: 'test-team',
-  createdAt: 0,
-  leadAgentId: 'team-lead@test-team',
-  members: [
-    {
-      agentId: 'team-lead@test-team',
-      name: 'team-lead',
-      joinedAt: 0,
-      tmuxPaneId: 'leader',
-      cwd: '/tmp',
-      subscriptions: [],
-      backendType: 'in-process',
-    },
-  ],
-}
+// ─── Module mocks ───────────────────────────────────────────────────────────
 
-// ─── Module mocks (must be set up before dynamic import) ───────────────────
-
-beforeEach(() => {
-  callOrder.length = 0
+beforeEach(async () => {
+  tmpDir = await mkdtemp(join(tmpdir(), 'openclaude-spawn-test-'))
+  process.env.CLAUDE_CONFIG_DIR = tmpDir
   spawnShouldSucceed = true
-  mockWriteTeamFileAsync.mockClear()
+  teamFileAtSpawnTime = null
   mockSpawnInProcessTeammate.mockClear()
   mockStartInProcessTeammate.mockClear()
-
-  mock.module('react', () => ({
-    default: { createElement: () => null },
-    createElement: () => null,
-  }))
-
-  mock.module('../../Task.js', () => ({
-    createTaskStateBase: (_id: string, _type: string, desc: string) => ({
-      id: _id,
-      type: _type,
-      description: desc,
-      status: 'running',
-    }),
-    generateTaskId: (_type: string) => `task-${Math.random().toString(36).slice(2)}`,
-  }))
-
-  mock.module('../../utils/agentId.js', () => ({
-    formatAgentId: (name: string, team: string) => `${name}@${team}`,
-    parseAgentId: (id: string) => {
-      const [agentName, teamName] = id.split('@')
-      return { agentName, teamName }
-    },
-  }))
-
-  mock.module('../../utils/bash/shellQuote.js', () => ({
-    quote: (s: string) => `'${s}'`,
-  }))
-
-  mock.module('../../utils/errors.js', () => ({
-    errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
-  }))
-
-  mock.module('../../utils/execFileNoThrow.js', () => ({
-    execFileNoThrow: async () => ({ code: 0, stdout: '', stderr: '' }),
-  }))
-
-  mock.module('../../utils/swarm/backends/types.js', () => ({
-    isPaneBackend: (_type: string) => false,
-  }))
-
-  mock.module('../../utils/swarm/constants.js', () => ({
-    SWARM_SESSION_NAME: 'claude-swarm',
-    TEAM_LEAD_NAME: 'team-lead',
-    TEAMMATE_COMMAND_ENV_VAR: 'CLAUDE_TEAMMATE_COMMAND',
-    TMUX_COMMAND: 'tmux',
-  }))
-
-  mock.module('../../utils/swarm/It2SetupPrompt.js', () => ({
-    It2SetupPrompt: () => null,
-  }))
-
-  mock.module('../../utils/swarm/spawnUtils.js', () => ({
-    buildInheritedEnvVars: () => ({}),
-  }))
-
-  mock.module('../../utils/task/framework.js', () => ({
-    registerTask: () => {},
-    evictTerminalTask: () => {},
-    STOPPED_DISPLAY_MS: 3000,
-  }))
-
-  mock.module('../../utils/teammateMailbox.js', () => ({
-    writeToMailbox: async () => {},
-  }))
-
-  mock.module('../AgentTool/loadAgentsDir.js', () => ({
-    isCustomAgent: () => false,
-  }))
 
   mock.module('../../utils/swarm/backends/registry.js', () => ({
     isInProcessEnabled: () => true,
@@ -156,30 +83,8 @@ beforeEach(() => {
     spawnInProcessTeammate: mockSpawnInProcessTeammate,
   }))
 
-  mock.module('../../utils/swarm/teamHelpers.js', () => ({
-    readTeamFileAsync: async () => ({ ...baseTeamFile, members: [...baseTeamFile.members] }),
-    writeTeamFileAsync: mockWriteTeamFileAsync,
-    buildTeamContextBlock: (_name: string, _type: string, _file: unknown) =>
-      '[TEAM CONTEXT]\n[/TEAM CONTEXT]',
-    ensureTeamFileExists: async () => ({ ...baseTeamFile, members: [...baseTeamFile.members] }),
-    getTeamFilePath: (name: string) => `/tmp/.claude/teams/${name}/config.json`,
-    registerTeamForSessionCleanup: () => {},
-    sanitizeAgentName: (n: string) => n,
-    sanitizeName: (n: string) => n,
-  }))
-
   mock.module('../../utils/swarm/inProcessRunner.js', () => ({
     startInProcessTeammate: mockStartInProcessTeammate,
-  }))
-
-  mock.module('../../bootstrap/state.js', () => ({
-    getSessionId: () => 'test-session-id',
-    getSessionCreatedTeams: () => new Set<string>(),
-    getChromeFlagOverride: () => undefined,
-    getFlagSettingsPath: () => undefined,
-    getInlinePlugins: () => [],
-    getMainLoopModelOverride: () => null,
-    getSessionBypassPermissionsMode: () => undefined,
   }))
 
   mock.module('../../utils/cwd.js', () => ({
@@ -222,9 +127,86 @@ beforeEach(() => {
   mock.module('../../utils/bundledMode.js', () => ({
     isInBundledMode: () => false,
   }))
+
+  mock.module('react', () => ({
+    default: { createElement: () => null },
+    createElement: () => null,
+  }))
+
+  mock.module('../../Task.js', () => ({
+    createTaskStateBase: (_id: string, _type: string, desc: string) => ({
+      id: _id,
+      type: _type,
+      description: desc,
+      status: 'running',
+    }),
+    generateTaskId: (_type: string) =>
+      `task-${Math.random().toString(36).slice(2)}`,
+  }))
+
+  mock.module('../../utils/agentId.js', () => ({
+    formatAgentId: (name: string, team: string) => `${name}@${team}`,
+    parseAgentId: (id: string) => {
+      const [agentName, teamName] = id.split('@')
+      return { agentName, teamName }
+    },
+  }))
+
+  mock.module('../../utils/bash/shellQuote.js', () => ({
+    quote: (s: string) => `'${s}'`,
+  }))
+
+  // errors.js is pure helpers — use the real implementation
+
+  mock.module('../../utils/execFileNoThrow.js', () => ({
+    execFileNoThrow: async () => ({ code: 0, stdout: '', stderr: '' }),
+    execFileNoThrowWithCwd: async () => ({ code: 0, stdout: '', stderr: '' }),
+  }))
+
+  mock.module('../../utils/swarm/backends/types.js', () => ({
+    isPaneBackend: (_type: string) => false,
+  }))
+
+  mock.module('../../utils/swarm/constants.js', () => ({
+    SWARM_SESSION_NAME: 'claude-swarm',
+    TEAM_LEAD_NAME: 'team-lead',
+    TEAMMATE_COMMAND_ENV_VAR: 'CLAUDE_TEAMMATE_COMMAND',
+    TMUX_COMMAND: 'tmux',
+  }))
+
+  mock.module('../../utils/swarm/It2SetupPrompt.js', () => ({
+    It2SetupPrompt: () => null,
+  }))
+
+  mock.module('../../utils/swarm/spawnUtils.js', () => ({
+    buildInheritedEnvVars: () => ({}),
+  }))
+
+  mock.module('../../utils/task/framework.js', () => ({
+    registerTask: () => {},
+    evictTerminalTask: () => {},
+    STOPPED_DISPLAY_MS: 3000,
+  }))
+
+  mock.module('../../utils/teammateMailbox.js', () => ({
+    writeToMailbox: async () => {},
+  }))
+
+  mock.module('../AgentTool/loadAgentsDir.js', () => ({
+    isCustomAgent: () => false,
+  }))
 })
 
-afterEach(() => {
+afterEach(async () => {
+  mock.restore()
+  delete process.env.CLAUDE_CONFIG_DIR
+  if (tmpDir) {
+    await rm(tmpDir, { recursive: true, force: true })
+    tmpDir = ''
+  }
+})
+
+afterAll(() => {
   mock.restore()
 })
 
@@ -242,19 +224,30 @@ function makeContext(teamName = 'test-team') {
     },
     getAppState: () => state,
     toolUseId: 'tool-use-001',
-    options: {
-      agentDefinitions: { activeAgents: [] },
-    },
+    options: { agentDefinitions: { activeAgents: [] } },
     messages: [],
   } as unknown as import('../../Tool.js').ToolUseContext
+}
+
+async function readTeamFile(
+  teamName: string,
+): Promise<{ members: Array<{ name: string }> } | null> {
+  try {
+    const raw = await readFile(
+      join(tmpDir, 'teams', teamName, 'config.json'),
+      'utf-8',
+    )
+    return JSON.parse(raw) as { members: Array<{ name: string }> }
+  } catch {
+    return null
+  }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('handleSpawnInProcess – team file atomicity', () => {
-  it('does NOT write the team file when spawnInProcessTeammate fails', async () => {
+  it('does NOT persist the new member to the team file when spawn fails', async () => {
     spawnShouldSucceed = false
-
     const { spawnTeammate } = await import('./spawnMultiAgent.js')
 
     await expect(
@@ -264,12 +257,13 @@ describe('handleSpawnInProcess – team file atomicity', () => {
       ),
     ).rejects.toThrow('mock spawn failure')
 
-    expect(mockWriteTeamFileAsync).not.toHaveBeenCalled()
+    const file = await readTeamFile('test-team')
+    const hasGhost = file?.members.some(m => m.name === 'researcher') ?? false
+    expect(hasGhost).toBe(false)
   })
 
-  it('writes the team file when spawnInProcessTeammate succeeds', async () => {
+  it('persists the new member after spawn succeeds', async () => {
     spawnShouldSucceed = true
-
     const { spawnTeammate } = await import('./spawnMultiAgent.js')
 
     await spawnTeammate(
@@ -277,12 +271,12 @@ describe('handleSpawnInProcess – team file atomicity', () => {
       makeContext(),
     )
 
-    expect(mockWriteTeamFileAsync).toHaveBeenCalledTimes(1)
+    const file = await readTeamFile('test-team')
+    expect(file?.members.some(m => m.name === 'coder')).toBe(true)
   })
 
-  it('calls spawnInProcessTeammate BEFORE writeTeamFileAsync (no TOCTOU)', async () => {
+  it('new member is NOT in team file at the moment spawnInProcessTeammate is called (no TOCTOU)', async () => {
     spawnShouldSucceed = true
-
     const { spawnTeammate } = await import('./spawnMultiAgent.js')
 
     await spawnTeammate(
@@ -290,17 +284,16 @@ describe('handleSpawnInProcess – team file atomicity', () => {
       makeContext(),
     )
 
-    const spawnIdx = callOrder.indexOf('spawnInProcessTeammate')
-    const writeIdx = callOrder.indexOf('writeTeamFileAsync')
-
-    expect(spawnIdx).toBeGreaterThanOrEqual(0)
-    expect(writeIdx).toBeGreaterThanOrEqual(0)
-    expect(spawnIdx).toBeLessThan(writeIdx)
+    // teamFileAtSpawnTime was captured inside the mock at the instant spawn was called.
+    // If the file write happened before spawn (the old bug) the member would already
+    // be present.  Under the fixed code the member must NOT be there yet.
+    const hadMemberBeforeSpawn =
+      teamFileAtSpawnTime?.members.some(m => m.name === 'tester') ?? false
+    expect(hadMemberBeforeSpawn).toBe(false)
   })
 
   it('re-throws the spawn error message verbatim', async () => {
     spawnShouldSucceed = false
-
     const { spawnTeammate } = await import('./spawnMultiAgent.js')
 
     await expect(
@@ -311,40 +304,8 @@ describe('handleSpawnInProcess – team file atomicity', () => {
     ).rejects.toThrow('mock spawn failure')
   })
 
-  it('writes team file exactly once per successful spawn', async () => {
-    spawnShouldSucceed = true
-
-    const { spawnTeammate } = await import('./spawnMultiAgent.js')
-
-    await spawnTeammate(
-      { name: 'writer', prompt: 'draft the docs', team_name: 'test-team' },
-      makeContext(),
-    )
-
-    expect(mockWriteTeamFileAsync).toHaveBeenCalledTimes(1)
-  })
-
-  it('passes the updated team file (with new member) to writeTeamFileAsync', async () => {
-    spawnShouldSucceed = true
-
-    const { spawnTeammate } = await import('./spawnMultiAgent.js')
-
-    await spawnTeammate(
-      { name: 'reviewer', prompt: 'review the PR', team_name: 'test-team' },
-      makeContext(),
-    )
-
-    const [writtenName, writtenFile] = mockWriteTeamFileAsync.mock.calls[0] as [
-      string,
-      { members: Array<{ name: string }> },
-    ]
-    expect(writtenName).toBe('test-team')
-    expect(writtenFile.members.some(m => m.name === 'reviewer')).toBe(true)
-  })
-
-  it('does not call startInProcessTeammate when spawn fails', async () => {
+  it('does not start the agent execution loop when spawn fails', async () => {
     spawnShouldSucceed = false
-
     const { spawnTeammate } = await import('./spawnMultiAgent.js')
 
     await expect(
@@ -355,5 +316,39 @@ describe('handleSpawnInProcess – team file atomicity', () => {
     ).rejects.toThrow()
 
     expect(mockStartInProcessTeammate).not.toHaveBeenCalled()
+  })
+
+  it('team file contains the new member with correct name and backendType after success', async () => {
+    spawnShouldSucceed = true
+    const { spawnTeammate } = await import('./spawnMultiAgent.js')
+
+    await spawnTeammate(
+      { name: 'reviewer', prompt: 'review the PR', team_name: 'test-team' },
+      makeContext(),
+    )
+
+    const file = await readTeamFile('test-team')
+    const member = file?.members.find(m => m.name === 'reviewer')
+    expect(member).toBeDefined()
+    expect(member?.backendType).toBe('in-process')
+  })
+
+  it('leaves no trace in the team file across two consecutive failed spawns', async () => {
+    spawnShouldSucceed = false
+    const { spawnTeammate } = await import('./spawnMultiAgent.js')
+
+    for (const name of ['alpha', 'beta']) {
+      await expect(
+        spawnTeammate(
+          { name, prompt: 'do work', team_name: 'test-team' },
+          makeContext(),
+        ),
+      ).rejects.toThrow()
+    }
+
+    const file = await readTeamFile('test-team')
+    const nonLeadMembers =
+      file?.members.filter(m => m.name !== 'team-lead') ?? []
+    expect(nonLeadMembers).toHaveLength(0)
   })
 })

@@ -1,4 +1,5 @@
 import { afterEach, expect, mock, test } from 'bun:test'
+import * as envReal from './env.ts'
 import * as fsPromises from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
@@ -22,7 +23,8 @@ async function importFreshInstaller() {
 
 test('install command displays ~/.local/bin/openclaude on non-Windows', async () => {
   mock.module('../utils/env.js', () => ({
-    env: { platform: 'darwin' },
+    ...envReal,
+    env: { ...envReal.env, platform: 'darwin' },
   }))
 
   const { getInstallationPath } = await importFreshInstallCommand()
@@ -32,7 +34,8 @@ test('install command displays ~/.local/bin/openclaude on non-Windows', async ()
 
 test('install command displays openclaude.exe path on Windows', async () => {
   mock.module('../utils/env.js', () => ({
-    env: { platform: 'win32' },
+    ...envReal,
+    env: { ...envReal.env, platform: 'win32' },
   }))
 
   const { getInstallationPath } = await importFreshInstallCommand()
@@ -55,16 +58,15 @@ test('cleanupNpmInstallations removes both openclaude and legacy claude local in
     },
   }))
 
+  // Set CLAUDE_CONFIG_DIR so getClaudeConfigHomeDir() returns the expected path
+  // without mocking envUtils.js (which can leave stale live bindings in bun).
+  process.env.CLAUDE_CONFIG_DIR = join(homedir(), '.openclaude')
+
   mock.module('./execFileNoThrow.js', () => ({
     execFileNoThrowWithCwd: async () => ({
       code: 1,
       stderr: 'npm ERR! code E404',
     }),
-  }))
-
-  mock.module('./envUtils.js', () => ({
-    getClaudeConfigHomeDir: () => join(homedir(), '.openclaude'),
-    isEnvTruthy: (value: string | undefined) => value === '1',
   }))
 
   const { cleanupNpmInstallations } = await importFreshInstaller()

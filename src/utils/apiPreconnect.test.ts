@@ -25,7 +25,7 @@ describe('preconnectAnthropicApi', () => {
       getAPIProvider: () => 'openai',
       usesAnthropicAccountFlow: () => false,
       getAPIProviderForStatsig: () => 'openai',
-      isFirstPartyAnthropicBaseUrl: () => true,
+      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 200 })))
     globalThis.fetch = fetchMock as typeof globalThis.fetch
@@ -42,7 +42,7 @@ describe('preconnectAnthropicApi', () => {
       getAPIProvider: () => 'gemini',
       usesAnthropicAccountFlow: () => false,
       getAPIProviderForStatsig: () => 'gemini',
-      isFirstPartyAnthropicBaseUrl: () => true,
+      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 200 })))
     globalThis.fetch = fetchMock as typeof globalThis.fetch
@@ -59,7 +59,7 @@ describe('preconnectAnthropicApi', () => {
       getAPIProvider: () => 'github',
       usesAnthropicAccountFlow: () => false,
       getAPIProviderForStatsig: () => 'github',
-      isFirstPartyAnthropicBaseUrl: () => true,
+      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 200 })))
     globalThis.fetch = fetchMock as typeof globalThis.fetch

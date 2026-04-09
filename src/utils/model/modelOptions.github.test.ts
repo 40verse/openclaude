@@ -9,7 +9,7 @@ async function importFreshModelOptionsModule() {
     getAPIProvider: () => 'github',
     getAPIProviderForStatsig: () => 'github',
     usesAnthropicAccountFlow: () => false,
-    isFirstPartyAnthropicBaseUrl: () => true,
+    isFirstPartyAnthropicBaseUrl: () => false,
   }))
   const nonce = `${Date.now()}-${Math.random()}`
   return import(`./modelOptions.js?ts=${nonce}`)

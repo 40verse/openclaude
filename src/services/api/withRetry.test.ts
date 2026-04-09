@@ -58,7 +58,7 @@ async function importFreshWithRetryModule(
     getAPIProvider: () => provider,
     getAPIProviderForStatsig: () => provider,
     usesAnthropicAccountFlow: () => provider === 'firstParty',
-    isFirstPartyAnthropicBaseUrl: () => true,
+    isFirstPartyAnthropicBaseUrl: () => provider === 'firstParty',
   }))
   return import(`./withRetry.js?ts=${Date.now()}-${Math.random()}`)
 }

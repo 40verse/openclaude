@@ -27,7 +27,7 @@ function makeProvidersMock(provider: string) {
     getAPIProvider: () => provider,
     usesAnthropicAccountFlow: () => provider === 'firstParty',
     getAPIProviderForStatsig: () => provider,
-    isFirstPartyAnthropicBaseUrl: () => true,
+    isFirstPartyAnthropicBaseUrl: () => provider === 'firstParty',
   })
 }
 

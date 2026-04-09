@@ -23,7 +23,7 @@ describe('checkDomainBlocklist', () => {
     mock.module('../../utils/model/providers.js', () => ({
       getAPIProvider: () => 'openai',
       usesAnthropicAccountFlow: () => false,
-      isFirstPartyAnthropicBaseUrl: () => true,
+      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const getSpy = mock(() =>
       Promise.resolve({ status: 200, data: { can_fetch: true } }),
@@ -42,7 +42,7 @@ describe('checkDomainBlocklist', () => {
     mock.module('../../utils/model/providers.js', () => ({
       getAPIProvider: () => 'gemini',
       usesAnthropicAccountFlow: () => false,
-      isFirstPartyAnthropicBaseUrl: () => true,
+      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const getSpy = mock(() =>
       Promise.resolve({ status: 200, data: { can_fetch: true } }),

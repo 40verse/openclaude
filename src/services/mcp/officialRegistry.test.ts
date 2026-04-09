@@ -23,7 +23,7 @@ describe('prefetchOfficialMcpUrls', () => {
     mock.module('../../utils/model/providers.js', () => ({
       getAPIProvider: () => 'openai',
       usesAnthropicAccountFlow: () => false,
-      isFirstPartyAnthropicBaseUrl: () => true,
+      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const getSpy = mock(() => Promise.resolve({ data: { servers: [] } }))
     axios.get = getSpy as typeof axios.get
@@ -39,7 +39,7 @@ describe('prefetchOfficialMcpUrls', () => {
     mock.module('../../utils/model/providers.js', () => ({
       getAPIProvider: () => 'gemini',
       usesAnthropicAccountFlow: () => false,
-      isFirstPartyAnthropicBaseUrl: () => true,
+      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const getSpy = mock(() => Promise.resolve({ data: { servers: [] } }))
     axios.get = getSpy as typeof axios.get

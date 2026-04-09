@@ -109,7 +109,7 @@ test('deserializeMessagesWithInterruptDetection strips thinking blocks only for 
     getAPIProvider: () => 'openai',
     getAPIProviderForStatsig: () => 'openai',
     usesAnthropicAccountFlow: () => false,
-    isFirstPartyAnthropicBaseUrl: () => true,
+    isFirstPartyAnthropicBaseUrl: () => false,
     isOpenAICompatibleProvider: (provider: string) =>
       provider === 'openai' ||
       provider === 'gemini' ||
@@ -139,7 +139,7 @@ test('deserializeMessagesWithInterruptDetection strips thinking blocks only for 
     getAPIProvider: () => 'bedrock',
     getAPIProviderForStatsig: () => 'bedrock',
     usesAnthropicAccountFlow: () => false,
-    isFirstPartyAnthropicBaseUrl: () => true,
+    isFirstPartyAnthropicBaseUrl: () => false,
     isOpenAICompatibleProvider: (provider: string) =>
       provider === 'openai' ||
       provider === 'gemini' ||

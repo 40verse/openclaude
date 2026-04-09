@@ -7,6 +7,9 @@ async function importFreshModelOptionsModule() {
   mock.restore()
   mock.module('./providers.js', () => ({
     getAPIProvider: () => 'github',
+    getAPIProviderForStatsig: () => 'github',
+    usesAnthropicAccountFlow: () => false,
+    isFirstPartyAnthropicBaseUrl: () => true,
   }))
   const nonce = `${Date.now()}-${Math.random()}`
   return import(`./modelOptions.js?ts=${nonce}`)

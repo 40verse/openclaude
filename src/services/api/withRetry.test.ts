@@ -57,6 +57,8 @@ async function importFreshWithRetryModule(
   mock.module('src/utils/model/providers.js', () => ({
     getAPIProvider: () => provider,
     getAPIProviderForStatsig: () => provider,
+    usesAnthropicAccountFlow: () => provider === 'firstParty',
+    isFirstPartyAnthropicBaseUrl: () => true,
   }))
   return import(`./withRetry.js?ts=${Date.now()}-${Math.random()}`)
 }

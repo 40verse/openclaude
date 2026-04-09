@@ -107,6 +107,9 @@ test('deserializeMessagesWithInterruptDetection strips thinking blocks only for 
 
   mock.module('./model/providers.js', () => ({
     getAPIProvider: () => 'openai',
+    getAPIProviderForStatsig: () => 'openai',
+    usesAnthropicAccountFlow: () => false,
+    isFirstPartyAnthropicBaseUrl: () => true,
     isOpenAICompatibleProvider: (provider: string) =>
       provider === 'openai' ||
       provider === 'gemini' ||
@@ -134,6 +137,9 @@ test('deserializeMessagesWithInterruptDetection strips thinking blocks only for 
   mock.restore()
   mock.module('./model/providers.js', () => ({
     getAPIProvider: () => 'bedrock',
+    getAPIProviderForStatsig: () => 'bedrock',
+    usesAnthropicAccountFlow: () => false,
+    isFirstPartyAnthropicBaseUrl: () => true,
     isOpenAICompatibleProvider: (provider: string) =>
       provider === 'openai' ||
       provider === 'gemini' ||

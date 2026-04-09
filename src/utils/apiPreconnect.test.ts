@@ -23,9 +23,6 @@ describe('preconnectAnthropicApi', () => {
     process.env.CLAUDE_CODE_USE_OPENAI = '1'
     mock.module('./model/providers.js', () => ({
       getAPIProvider: () => 'openai',
-      usesAnthropicAccountFlow: () => false,
-      getAPIProviderForStatsig: () => 'openai',
-      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 200 })))
     globalThis.fetch = fetchMock as typeof globalThis.fetch
@@ -40,9 +37,6 @@ describe('preconnectAnthropicApi', () => {
     process.env.CLAUDE_CODE_USE_GEMINI = '1'
     mock.module('./model/providers.js', () => ({
       getAPIProvider: () => 'gemini',
-      usesAnthropicAccountFlow: () => false,
-      getAPIProviderForStatsig: () => 'gemini',
-      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 200 })))
     globalThis.fetch = fetchMock as typeof globalThis.fetch
@@ -57,9 +51,6 @@ describe('preconnectAnthropicApi', () => {
     process.env.CLAUDE_CODE_USE_GITHUB = '1'
     mock.module('./model/providers.js', () => ({
       getAPIProvider: () => 'github',
-      usesAnthropicAccountFlow: () => false,
-      getAPIProviderForStatsig: () => 'github',
-      isFirstPartyAnthropicBaseUrl: () => false,
     }))
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 200 })))
     globalThis.fetch = fetchMock as typeof globalThis.fetch
@@ -88,9 +79,6 @@ describe('preconnectAnthropicApi', () => {
 
     mock.module('./model/providers.js', () => ({
       getAPIProvider: () => 'firstParty',
-      usesAnthropicAccountFlow: () => true,
-      getAPIProviderForStatsig: () => 'firstParty',
-      isFirstPartyAnthropicBaseUrl: () => true,
     }))
     const fetchMock = mock(() => Promise.resolve(new Response(null, { status: 200 })))
     globalThis.fetch = fetchMock as typeof globalThis.fetch

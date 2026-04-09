@@ -128,11 +128,6 @@ beforeEach(async () => {
     isInBundledMode: () => false,
   }))
 
-  mock.module('react', () => ({
-    default: { createElement: () => null },
-    createElement: () => null,
-  }))
-
   mock.module('../../Task.js', () => ({
     createTaskStateBase: (_id: string, _type: string, desc: string) => ({
       id: _id,

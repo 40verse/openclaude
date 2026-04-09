@@ -59,6 +59,21 @@ const EXECUTABLE_PATH_REGEX =
 const SENSITIVE_PATH_REGEX =
   /^(?:\.github\/workflows\/|scripts\/|bin\/|install(?:\/|\.|$)|.*(?:Dockerfile|docker-compose|compose\.ya?ml)$)/i
 
+/**
+ * Maximum line distance between a `write*FileAsync` call and an `await spawn*Teammate`
+ * call for them to be considered part of the same logical operation.
+ *
+ * Why 100? A single async function body that both writes a team file and spawns
+ * a teammate is unlikely to span more than ~100 lines in practice. Pairs that are
+ * farther apart almost certainly belong to different functions or different code
+ * paths and should not be flagged as a write-before-spawn ordering violation.
+ *
+ * The scope heuristic (no closing brace at the same indentation between the two
+ * calls) provides a second filter, but this distance cap is the primary safeguard
+ * against false positives across unrelated call sites in large files.
+ */
+const MAX_WRITE_SPAWN_DISTANCE = 100
+
 function parseOptions(argv: string[]): CliOptions {
   const options: CliOptions = {
     baseRef: 'origin/main',
@@ -422,9 +437,7 @@ export function findFileOrderingFindings(
     for (const write of writeLines) {
       for (const spawn of spawnLines) {
         const distance = spawn.lineNo - write.lineNo
-        // Only flag if spawn comes after write and both are within 100 lines
-        // (a rough proxy for the same function body).
-        if (distance <= 0 || distance > 100) continue
+        if (distance <= 0 || distance > MAX_WRITE_SPAWN_DISTANCE) continue
 
         // Confirm they share the same function scope: no closing brace at the
         // write's indentation level (or less) should appear between them.
@@ -526,6 +539,16 @@ function renderText(findings: Finding[]): string {
   return lines.join('\n')
 }
 
+/**
+ * Run the intent scan and return a shell exit code (0 = clean / advisory only,
+ * 1 = findings at or above `options.failOn` severity).
+ *
+ * Diff source priority:
+ *   1. `diffOverride` — caller-supplied text (used by tests)
+ *   2. `--stdin`      — piped diff (used by the pre-commit hook:
+ *                        `git diff --cached | bun run scripts/pr-intent-scan.ts --stdin`)
+ *   3. `--base <ref>` — computed via `git diff <ref>...HEAD` (default: origin/main)
+ */
 export function run(options: CliOptions, diffOverride?: string): number {
   const diff = diffOverride ?? (options.stdin
     ? readFileSync('/dev/stdin', 'utf-8')

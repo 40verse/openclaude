@@ -20,6 +20,7 @@ export type Finding = {
 
 type CliOptions = {
   baseRef: string
+  stdin: boolean
   json: boolean
   failOn: FindingSeverity
 }
@@ -61,12 +62,17 @@ const SENSITIVE_PATH_REGEX =
 function parseOptions(argv: string[]): CliOptions {
   const options: CliOptions = {
     baseRef: 'origin/main',
+    stdin: false,
     json: false,
     failOn: 'high',
   }
 
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
+    if (arg === '--stdin') {
+      options.stdin = true
+      continue
+    }
     if (arg === '--json') {
       options.json = true
       continue
@@ -520,8 +526,10 @@ function renderText(findings: Finding[]): string {
   return lines.join('\n')
 }
 
-export function run(options: CliOptions): number {
-  const diff = getGitDiff(options.baseRef)
+export function run(options: CliOptions, diffOverride?: string): number {
+  const diff = diffOverride ?? (options.stdin
+    ? readFileSync('/dev/stdin', 'utf-8')
+    : getGitDiff(options.baseRef))
   const addedLines = parseAddedLines(diff)
   const findings = scanAddedLines(addedLines)
 

@@ -95,7 +95,7 @@ fi
 # ── 4. PR intent scan on staged diff ─────────────────────────────────────────
 echo ""
 echo "pre-commit [3/3]: pr-intent-scan..."
-SCAN_OUTPUT=$(git diff --cached --unified=0 | bun run scripts/pr-intent-scan.ts --base HEAD 2>/dev/null || true)
+SCAN_OUTPUT=$(git diff --cached --unified=0 | bun run scripts/pr-intent-scan.ts --stdin 2>/dev/null || true)
 if echo "$SCAN_OUTPUT" | grep -q "finding(s)"; then
   SCAN_FINDINGS=$(echo "$SCAN_OUTPUT" | grep -oE '[0-9]+ finding' | grep -oE '[0-9]+' || echo "0")
   HIGH=$(echo "$SCAN_OUTPUT" | grep -oE 'high: [0-9]+' | grep -oE '[0-9]+' || echo "0")

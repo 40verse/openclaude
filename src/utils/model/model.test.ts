@@ -2,6 +2,41 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 import { resetModelStringsForTestingOnly } from '../../bootstrap/state.js'
 import { getDefaultHaikuModel, getSmallFastModel } from './model.js'
+import { isEnvTruthy } from '../envUtils.js'
+import { shouldUseCodexTransport } from '../../services/api/providerConfig.js'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Providers mock — restore real env-var-based detection so this file is not
+// affected by any prior test file that mocked './model/providers.js'.
+// ─────────────────────────────────────────────────────────────────────────────
+mock.module('./providers.js', () => {
+  function getAPIProvider() {
+    return isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI)
+      ? 'gemini'
+      : isEnvTruthy(process.env.CLAUDE_CODE_USE_GITHUB)
+        ? 'github'
+        : isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)
+          ? shouldUseCodexTransport(
+              process.env.OPENAI_MODEL || '',
+              process.env.OPENAI_BASE_URL ?? process.env.OPENAI_API_BASE,
+            )
+            ? 'codex'
+            : 'openai'
+          : isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)
+            ? 'bedrock'
+            : isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)
+              ? 'vertex'
+              : isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
+                ? 'foundry'
+                : 'firstParty'
+  }
+  return {
+    getAPIProvider,
+    usesAnthropicAccountFlow: () => getAPIProvider() === 'firstParty',
+    getAPIProviderForStatsig: getAPIProvider,
+    isFirstPartyAnthropicBaseUrl: () => true,
+  }
+})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings mock — allows per-test control of modelTiers.small

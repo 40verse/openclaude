@@ -7,8 +7,8 @@ import { isEnvTruthy } from '../../utils/envUtils.js'
 
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex'
-/** Default GitHub Models API model when user selects copilot / github:copilot */
-export const DEFAULT_GITHUB_MODELS_API_MODEL = 'openai/gpt-4.1'
+/** Default GitHub Copilot API model when user selects copilot / github:copilot */
+export const DEFAULT_GITHUB_MODELS_API_MODEL = 'gpt-4o'
 
 const CODEX_ALIAS_MODELS: Record<
   string,
@@ -219,6 +219,29 @@ export function isCodexAlias(model: string): boolean {
   return base in CODEX_ALIAS_MODELS
 }
 
+export function shouldUseCodexTransport(
+  model: string,
+  baseUrl: string | undefined,
+): boolean {
+  const explicitBaseUrl = asEnvUrl(baseUrl)
+  return isCodexBaseUrl(explicitBaseUrl) || (!explicitBaseUrl && isCodexAlias(model))
+}
+
+function shouldUseGithubResponsesApi(model: string): boolean {
+  const normalized = model.trim().toLowerCase()
+
+  // Codex-branded models require /responses.
+  if (normalized.includes('codex')) return true
+
+  // GPT-5+ models use /responses, except gpt-5-mini.
+  const match = /^gpt-(\d+)/.exec(normalized)
+  if (!match) return false
+  const major = Number(match[1])
+  if (major < 5) return false
+  if (normalized.startsWith('gpt-5-mini')) return false
+  return true
+}
+
 export function isLocalProviderUrl(baseUrl: string | undefined): boolean {
   if (!baseUrl) return false
   try {
@@ -272,17 +295,59 @@ export function isCodexBaseUrl(baseUrl: string | undefined): boolean {
 }
 
 /**
- * Normalize user model string for GitHub Models inference (models.github.ai).
- * Mirrors runtime devsper `github._normalize_model_id`.
+ * Normalize user model string for GitHub Copilot API inference.
+ * Mirrors how Copilot resolves model IDs internally.
  */
-export function normalizeGithubModelsApiModel(requestedModel: string): string {
+export function normalizeGithubCopilotModel(requestedModel: string): string {
   const noQuery = requestedModel.split('?', 1)[0] ?? requestedModel
   const segment =
     noQuery.includes(':') ? noQuery.split(':', 2)[1]!.trim() : noQuery.trim()
   if (!segment || segment.toLowerCase() === 'copilot') {
     return DEFAULT_GITHUB_MODELS_API_MODEL
   }
+  // Strip provider prefix if present (e.g., "openai/gpt-4o" -> "gpt-4o")
+  const slashIndex = segment.indexOf('/')
+  if (slashIndex !== -1) {
+    return segment.slice(slashIndex + 1)
+  }
   return segment
+}
+
+/**
+ * Normalize user model string for GitHub Models API inference.
+ * Only normalizes the default alias, preserves provider-qualified models.
+ */
+export function normalizeGithubModelsApiModel(requestedModel: string): string {
+  const noQuery = requestedModel.split('?', 1)[0] ?? requestedModel
+  const segment =
+    noQuery.includes(':') ? noQuery.split(':', 2)[1]!.trim() : noQuery.trim()
+  // Only normalize the default alias for GitHub Models
+  if (!segment || segment.toLowerCase() === 'copilot') {
+    return DEFAULT_GITHUB_MODELS_API_MODEL
+  }
+  // Preserve provider prefix for GitHub Models (e.g., "openai/gpt-4.1" stays as-is)
+  return segment
+}
+
+export const GITHUB_COPILOT_BASE_URL = 'https://api.githubcopilot.com'
+export const GITHUB_MODELS_BASE_URL = 'https://models.github.ai/inference'
+
+export function getGithubEndpointType(
+  baseUrl: string | undefined,
+): 'copilot' | 'models' | 'custom' {
+  if (!baseUrl) return 'copilot'
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase()
+    if (hostname === 'api.githubcopilot.com') {
+      return 'copilot'
+    }
+    if (hostname === 'models.github.ai' || hostname.endsWith('.github.ai')) {
+      return 'models'
+    }
+    return 'custom'
+  } catch {
+    return 'copilot'
+  }
 }
 
 export function resolveProviderRequest(options?: {
@@ -302,26 +367,37 @@ export function resolveProviderRequest(options?: {
     asEnvUrl(options?.baseUrl) ??
     asEnvUrl(process.env.OPENAI_BASE_URL) ??
     asEnvUrl(process.env.OPENAI_API_BASE)
-  // Use Codex transport only when:
-  // - the base URL is explicitly the Codex endpoint, OR
-  // - the model is a Codex alias AND no custom base URL has been set
-  // A custom OPENAI_BASE_URL (e.g. Azure, OpenRouter) always wins over
-  // model-name-based Codex detection to prevent auth failures (#200, #203).
+
+  const githubEndpointType = isGithubMode
+    ? getGithubEndpointType(rawBaseUrl)
+    : 'custom'
+  const isGithubCopilot = isGithubMode && githubEndpointType === 'copilot'
+  const isGithubModels = isGithubMode && githubEndpointType === 'models'
+  const isGithubCustom = isGithubMode && githubEndpointType === 'custom'
+
+  const githubResolvedModel = isGithubMode
+    ? normalizeGithubModelsApiModel(requestedModel)
+    : requestedModel
+
   const transport: ProviderTransport =
-    isCodexBaseUrl(rawBaseUrl) || (!rawBaseUrl && isCodexAlias(requestedModel))
+    shouldUseCodexTransport(requestedModel, rawBaseUrl) ||
+      (isGithubCopilot && shouldUseGithubResponsesApi(githubResolvedModel))
       ? 'codex_responses'
       : 'chat_completions'
 
-  const resolvedModel =
-    transport === 'chat_completions' &&
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_GITHUB)
-      ? normalizeGithubModelsApiModel(requestedModel)
-      : descriptor.baseModel
+  // For GitHub Copilot API, normalize to real model ID (e.g., "github:copilot" -> "gpt-4o")
+  // For GitHub Models/custom endpoints:
+  //   - Normalize default alias (github:copilot -> gpt-4o)
+  //   - Preserve provider-qualified models (openai/gpt-4.1 stays as-is)
+  const resolvedModel = isGithubCopilot
+    ? normalizeGithubCopilotModel(descriptor.baseModel)
+    : (isGithubModels || isGithubCustom
+      ? normalizeGithubModelsApiModel(descriptor.baseModel)
+      : descriptor.baseModel)
 
   const reasoning = options?.reasoningEffortOverride
     ? { effort: options.reasoningEffortOverride }
     : descriptor.reasoning
-
 
   return {
     transport,
@@ -329,12 +405,38 @@ export function resolveProviderRequest(options?: {
     resolvedModel,
     baseUrl:
       (rawBaseUrl ??
-        (transport === 'codex_responses'
-          ? DEFAULT_CODEX_BASE_URL
-          : DEFAULT_OPENAI_BASE_URL)
+        (isGithubCopilot && transport === 'codex_responses'
+          ? GITHUB_COPILOT_BASE_URL
+          : (isGithubMode
+            ? GITHUB_COPILOT_BASE_URL
+            : DEFAULT_OPENAI_BASE_URL))
       ).replace(/\/+$/, ''),
     reasoning,
   }
+}
+
+export function getAdditionalModelOptionsCacheScope(): string | null {
+  if (!isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) {
+    if (!isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI) &&
+        !isEnvTruthy(process.env.CLAUDE_CODE_USE_GITHUB) &&
+        !isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) &&
+        !isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) &&
+        !isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) {
+      return 'firstParty'
+    }
+    return null
+  }
+
+  const request = resolveProviderRequest()
+  if (request.transport !== 'chat_completions') {
+    return null
+  }
+
+  if (!isLocalProviderUrl(request.baseUrl)) {
+    return null
+  }
+
+  return `openai:${request.baseUrl.toLowerCase()}`
 }
 
 export function resolveCodexAuthPath(

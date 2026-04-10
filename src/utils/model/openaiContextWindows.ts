@@ -23,9 +23,13 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   'gpt-4.1-nano':             1_047_576,
   'gpt-4-turbo':              128_000,
   'gpt-4':                     8_192,
+  'o1':                       200_000,
+  'o1-mini':                  128_000,
+  'o1-preview':               128_000,
+  'o1-pro':                   200_000,
+  'o3':                       200_000,
   'o3-mini':                  200_000,
   'o4-mini':                  200_000,
-  'o3':                       200_000,
 
   // DeepSeek (V3: 128k context per official docs)
   'deepseek-chat':            128_000,
@@ -39,6 +43,10 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   // Mistral
   'mistral-large-latest':     131_072,
   'mistral-small-latest':     131_072,
+
+  // MiniMax
+  'MiniMax-M2.7':             204_800,
+  'minimax-m2.7':             204_800,
 
   // Google (via OpenRouter)
   'google/gemini-2.0-flash':1_048_576,
@@ -63,6 +71,9 @@ const OPENAI_CONTEXT_WINDOWS: Record<string, number> = {
   'phi4:14b':                  16_384,
   'gemma2:27b':                 8_192,
   'codellama:13b':              16_384,
+  'llama3.2:1b':              128_000,
+  'qwen3:8b':                 128_000,
+  'codestral':                 32_768,
 }
 
 /**
@@ -82,9 +93,13 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   'gpt-4.1-nano':             32_768,
   'gpt-4-turbo':               4_096,
   'gpt-4':                     4_096,
+  'o1':                       100_000,
+  'o1-mini':                   65_536,
+  'o1-preview':                32_768,
+  'o1-pro':                   100_000,
+  'o3':                       100_000,
   'o3-mini':                  100_000,
   'o4-mini':                  100_000,
-  'o3':                       100_000,
 
   // DeepSeek
   'deepseek-chat':              8_192,
@@ -98,6 +113,10 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   // Mistral
   'mistral-large-latest':     32_768,
   'mistral-small-latest':     32_768,
+
+  // MiniMax
+  'MiniMax-M2.7':            131_072,
+  'minimax-m2.7':            131_072,
 
   // Google (via OpenRouter)
   'google/gemini-2.0-flash':   8_192,
@@ -120,6 +139,9 @@ const OPENAI_MAX_OUTPUT_TOKENS: Record<string, number> = {
   'phi4:14b':                   4_096,
   'gemma2:27b':                 4_096,
   'codellama:13b':              4_096,
+  'llama3.2:1b':                4_096,
+  'qwen3:8b':                   8_192,
+  'codestral':                   8_192,
 }
 
 function lookupByModel<T>(table: Record<string, T>, model: string): T | undefined {

@@ -185,6 +185,41 @@ With Firecrawl enabled:
 
 Free tier at [firecrawl.dev](https://firecrawl.dev) includes 500 credits. The key is optional.
 
+---
+
+## Headless gRPC Server
+
+OpenClaude can be run as a headless gRPC service, allowing you to integrate its agentic capabilities (tools, bash, file editing) into other applications, CI/CD pipelines, or custom user interfaces. The server uses bidirectional streaming to send real-time text chunks, tool calls, and request permissions for sensitive commands.
+
+### 1. Start the gRPC Server
+
+Start the core engine as a gRPC service on `localhost:50051`:
+
+```bash
+npm run dev:grpc
+```
+
+#### Configuration
+
+| Variable | Default | Description |
+|-----------|-------------|------------------------------------------------|
+| `GRPC_PORT` | `50051` | Port the gRPC server listens on |
+| `GRPC_HOST` | `localhost` | Bind address. Use `0.0.0.0` to expose on all interfaces (not recommended without authentication) |
+
+### 2. Run the Test CLI Client
+
+We provide a lightweight CLI client that communicates exclusively over gRPC. It acts just like the main interactive CLI, rendering colors, streaming tokens, and prompting you for tool permissions (y/n) via the gRPC `action_required` event.
+
+In a separate terminal, run:
+
+```bash
+npm run dev:grpc:cli
+```
+
+*Note: The gRPC definitions are located in `src/proto/openclaude.proto`. You can use this file to generate clients in Python, Go, Rust, or any other language.*
+
+---
+
 ## Source Build And Local Development
 
 ```bash
@@ -196,11 +231,56 @@ node dist/cli.mjs
 Helpful commands:
 
 - `bun run dev`
+- `bun test`
+- `bun run test:coverage`
+- `bun run security:pr-scan -- --base origin/main`
 - `bun run smoke`
 - `bun run doctor:runtime`
 - `bun run verify:privacy`
 - focused `bun test ...` runs for the areas you touch
 
+## Testing And Coverage
+
+OpenClaude uses Bun's built-in test runner for unit tests.
+
+Run the full unit suite:
+
+```bash
+bun test
+```
+
+Generate unit test coverage:
+
+```bash
+bun run test:coverage
+```
+
+Open the visual coverage report:
+
+```bash
+open coverage/index.html
+```
+
+If you already have `coverage/lcov.info` and only want to rebuild the UI:
+
+```bash
+bun run test:coverage:ui
+```
+
+Use focused test runs when you only touch one area:
+
+- `bun run test:provider`
+- `bun run test:provider-recommendation`
+- `bun test path/to/file.test.ts`
+
+Recommended contributor validation before opening a PR:
+
+- `bun run build`
+- `bun run smoke`
+- `bun run test:coverage` for broader unit coverage when your change affects shared runtime or provider logic
+- focused `bun test ...` runs for the files and flows you changed
+
+Coverage output is written to `coverage/lcov.info`, and OpenClaude also generates a git-activity-style heatmap at `coverage/index.html`.
 ## Repository Structure
 
 - `src/` - core CLI/runtime
@@ -231,6 +311,7 @@ Contributions are welcome.
 For larger changes, open an issue first so the scope is clear before implementation. Helpful validation commands include:
 
 - `bun run build`
+- `bun run test:coverage`
 - `bun run smoke`
 - focused `bun test ...` runs for touched areas
 

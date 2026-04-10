@@ -196,6 +196,29 @@ describe('getSmallFastModel — provider defaults (no overrides)', () => {
 
     expect(getSmallFastModel().toLowerCase()).toContain('haiku')
   })
+
+  test('GitHub provider returns gpt-4o-mini (uses OpenAI model mapping)', () => {
+    clearProviderEnv()
+    clearSmallModelEnv()
+    process.env.CLAUDE_CODE_USE_GITHUB = '1'
+
+    // getBuiltinModelStrings maps 'github' → 'openai' key, so small model is
+    // gpt-4o-mini regardless of main-loop model (github:copilot).
+    expect(getSmallFastModel()).toBe('gpt-4o-mini')
+  })
+
+  test('Codex provider (gpt-5.4 main model) does not leak into small/fast tier', () => {
+    clearProviderEnv()
+    clearSmallModelEnv()
+    process.env.CLAUDE_CODE_USE_OPENAI = '1'
+    // gpt-5.4 is a CODEX_ALIAS_MODELS key — shouldUseCodexTransport() returns true,
+    // provider resolves to 'codex'. getBuiltinModelStrings maps 'codex' → 'openai',
+    // so the small tier correctly returns gpt-4o-mini, not the main gpt-5.4 model.
+    process.env.OPENAI_MODEL = 'gpt-5.4'
+
+    expect(getSmallFastModel()).toBe('gpt-4o-mini')
+    expect(getSmallFastModel()).not.toBe('gpt-5.4')
+  })
 })
 
 describe('getSmallFastModel — settings.modelTiers.small', () => {
@@ -413,5 +436,17 @@ describe('getDefaultHaikuModel — Ollama path', () => {
     const model = getDefaultHaikuModel()
     expect(model).not.toBe('gpt-4o-mini')
     expect(model).not.toBe('gemini-2.0-flash-lite')
+  })
+
+  test('empty Ollama /api/tags cache and no OPENAI_MODEL falls through to provider default', () => {
+    clearProviderEnv()
+    clearSmallModelEnv()
+    process.env.CLAUDE_CODE_USE_OPENAI = '1'
+    process.env.OLLAMA_BASE_URL = 'http://localhost:11434'
+    // OPENAI_MODEL not set; getCachedOllamaModelOptions() returns [] in test env
+    // (cachedOllamaOptions is null before any fetch runs)
+
+    // Falls through to getModelStrings().haiku45 → OpenAI config → 'gpt-4o-mini'
+    expect(getDefaultHaikuModel()).toBe('gpt-4o-mini')
   })
 })

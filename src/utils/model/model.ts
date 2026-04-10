@@ -33,23 +33,44 @@ export type ModelShortName = string
 export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
+/**
+ * Return the small/fast model for the active provider.
+ *
+ * This is the cheap tier used for side-calls (compaction, away summaries,
+ * token estimation, agentic search, hooks, etc.) where the full capability
+ * of the main-loop model isn't needed. Keeping this provider-agnostic is
+ * critical: openclaude supports OpenAI, Gemini, Bedrock, Vertex, Foundry,
+ * GitHub Copilot, and Anthropic first-party — any of them can be the active
+ * provider, and each needs a sensible cheap default.
+ *
+ * Priority:
+ *   1. CLAUDE_CODE_SMALL_FAST_MODEL — provider-agnostic explicit override.
+ *      Preferred for new installs and multi-provider setups.
+ *   2. ANTHROPIC_SMALL_FAST_MODEL — legacy env var kept for backwards
+ *      compatibility with users migrating from Claude Code.
+ *   3. getModelStrings().haiku45 — resolved per-provider via ALL_MODEL_CONFIGS
+ *      (Anthropic → Haiku, OpenAI → gpt-4o-mini, Gemini → gemini-2.0-flash-lite,
+ *      Bedrock/Vertex/Foundry → Haiku in the provider's format). Adding a new
+ *      provider only requires extending ALL_MODEL_CONFIGS — this function and
+ *      every call site pick it up automatically.
+ *
+ * Deliberately does NOT fall back to OPENAI_MODEL or GEMINI_MODEL. Those env
+ * vars hold the user's main-loop model, which is typically an expensive tier
+ * (gpt-4.1, gemini-2.5-pro-preview). Using them here would defeat the cost
+ * savings of routing side-calls through the small/fast tier.
+ */
 export function getSmallFastModel(): ModelName {
-  if (process.env.ANTHROPIC_SMALL_FAST_MODEL) return process.env.ANTHROPIC_SMALL_FAST_MODEL
-  // For Gemini provider, always use the cheapest fast model.
-  // Intentionally does NOT fall back to GEMINI_MODEL — that env var may point
-  // to an expensive model like gemini-2.5-pro-preview which defeats the purpose
-  // of using a small/fast model for side-calls like compaction.
-  if (getAPIProvider() === 'gemini') {
-    return 'gemini-2.0-flash-lite'
+  if (process.env.CLAUDE_CODE_SMALL_FAST_MODEL) {
+    return process.env.CLAUDE_CODE_SMALL_FAST_MODEL
   }
-  // For OpenAI provider, always use gpt-4o-mini.
-  // Intentionally does NOT fall back to OPENAI_MODEL — that env var may point
-  // to an expensive model like gpt-4.1 which defeats the purpose of using a
-  // small/fast model for side-calls like compaction.
-  if (getAPIProvider() === 'openai') {
-    return 'gpt-4o-mini'
+  if (process.env.ANTHROPIC_SMALL_FAST_MODEL) {
+    return process.env.ANTHROPIC_SMALL_FAST_MODEL
   }
-  return getDefaultHaikuModel()
+  // Haiku 4.5 is mapped to the cheapest fast model for every provider in
+  // ALL_MODEL_CONFIGS, so getModelStrings().haiku45 is already the right
+  // answer across firstParty, bedrock, vertex, foundry, openai, gemini,
+  // and codex.
+  return getModelStrings().haiku45
 }
 
 export function isNonCustomOpusModel(model: ModelName): boolean {

@@ -59,6 +59,7 @@ import usage from './commands/usage/index.js'
 import theme from './commands/theme/index.js'
 import vim from './commands/vim/index.js'
 import { feature } from 'bun:bundle'
+import { isBuddyEnabled } from './buddy/feature.js'
 // Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactive =
@@ -117,7 +118,7 @@ const forkCmd = feature('FORK_SUBAGENT')
       require('./commands/fork/index.js') as typeof import('./commands/fork/index.js')
     ).default
   : null
-const buddy = feature('BUDDY')
+const buddy = isBuddyEnabled()
   ? (
       require('./commands/buddy/index.js') as typeof import('./commands/buddy/index.js')
     ).default
@@ -135,6 +136,7 @@ import hooks from './commands/hooks/index.js'
 import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
 import agents from './commands/agents/index.js'
+import autoFix from './commands/auto-fix.js'
 import plugin from './commands/plugin/index.js'
 import reloadPlugins from './commands/reload-plugins/index.js'
 import rewind from './commands/rewind/index.js'
@@ -142,6 +144,7 @@ import heapDump from './commands/heapdump/index.js'
 import mockLimits from './commands/mock-limits/index.js'
 import bridgeKick from './commands/bridge-kick.js'
 import version from './commands/version.js'
+import wiki from './commands/wiki/index.js'
 import summary from './commands/summary/index.js'
 import {
   resetLimits,
@@ -262,6 +265,7 @@ const COMMANDS = memoize((): Command[] => [
   addDir,
   advisor,
   agents,
+  autoFix,
   branch,
   btw,
   chrome,
@@ -323,6 +327,7 @@ const COMMANDS = memoize((): Command[] => [
   usage,
   usageReport,
   vim,
+  wiki,
   ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
   ...(buddy ? [buddy] : []),
